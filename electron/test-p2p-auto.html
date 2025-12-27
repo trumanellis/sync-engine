@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Automated P2P Test</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 1000px;
+      margin: 50px auto;
+      padding: 20px;
+      background-color: #1e1e1e;
+      color: #d4d4d4;
+    }
+    h1 {
+      color: #4ec9b0;
+      border-bottom: 2px solid #4ec9b0;
+      padding-bottom: 10px;
+    }
+    .test-section {
+      background: #252526;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 8px;
+      border-left: 4px solid #007acc;
+    }
+    .test-section h2 {
+      color: #569cd6;
+      margin-top: 0;
+    }
+    .status {
+      display: inline-block;
+      padding: 5px 15px;
+      border-radius: 4px;
+      font-weight: bold;
+      margin-right: 10px;
+    }
+    .status.pending {
+      background-color: #ffa500;
+      color: #000;
+    }
+    .status.running {
+      background-color: #3794ff;
+      color: #fff;
+    }
+    .status.success {
+      background-color: #28a745;
+      color: #fff;
+    }
+    .status.error {
+      background-color: #dc3545;
+      color: #fff;
+    }
+    pre {
+      background: #1e1e1e;
+      padding: 15px;
+      border-radius: 4px;
+      overflow-x: auto;
+      border: 1px solid #3c3c3c;
+      color: #ce9178;
+    }
+    .log {
+      font-size: 13px;
+      line-height: 1.6;
+      color: #cccccc;
+    }
+    .timestamp {
+      color: #858585;
+      margin-right: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🤖 Automated P2P Connection Test</h1>
+
+  <div id="test-container"></div>
+
+  <div class="test-section">
+    <h2>📋 Test Log</h2>
+    <div id="log" class="log"></div>
+  </div>
+
+  <script>
+    // Test configuration
+    const INSTANCE_1_MULTIADDR = '/ip4/127.0.0.1/tcp/4003/p2p/12D3KooWKGJYW6bC9dvDRaZvAmRYiQtNn9ANaPDusrgEtpmJDUwQ';
+
+    const tests = [];
+    let logElement;
+
+    function log(message, type = 'info') {
+      const timestamp = new Date().toLocaleTimeString();
+      const logEntry = document.createElement('div');
+      logEntry.innerHTML = `<span class="timestamp">[${timestamp}]</span>${message}`;
+      if (type === 'error') logEntry.style.color = '#f48771';
+      if (type === 'success') logEntry.style.color = '#4ec9b0';
+      logElement.appendChild(logEntry);
+      console.log(`[${timestamp}] ${message}`);
+    }
+
+    function createTestSection(title, id) {
+      const section = document.createElement('div');
+      section.className = 'test-section';
+      section.innerHTML = `
+        <h2>
+          <span class="status pending" id="status-${id}">PENDING</span>
+          ${title}
+        </h2>
+        <pre id="result-${id}">Waiting to run...</pre>
+      `;
+      document.getElementById('test-container').appendChild(section);
+
+      return {
+        id,
+        setStatus: (status) => {
+          const statusEl = document.getElementById(`status-${id}`);
+          statusEl.className = `status ${status}`;
+          statusEl.textContent = status.toUpperCase();
+        },
+        setResult: (result) => {
+          document.getElementById(`result-${id}`).textContent = result;
+        }
+      };
+    }
+
+    async function runTests() {
+      logElement = document.getElementById('log');
+
+      log('🚀 Starting automated P2P tests...', 'info');
+
+      // Check if API is available
+      if (!window.electronP2P) {
+        log('❌ ERROR: window.electronP2P API not available!', 'error');
+        return;
+      }
+      log('✅ window.electronP2P API is available', 'success');
+
+      // Test 1: Get Peer ID
+      const test1 = createTestSection('Test 1: Get Peer ID', 'test1');
+      test1.setStatus('running');
+      log('Running Test 1: Get Peer ID...');
+
+      try {
+        const peerId = await window.electronP2P.getPeerId();
+        test1.setResult(`Peer ID: ${peerId}`);
+        test1.setStatus('success');
+        log(`✅ Test 1 PASSED: ${peerId}`, 'success');
+      } catch (error) {
+        test1.setResult(`Error: ${error.message}`);
+        test1.setStatus('error');
+        log(`❌ Test 1 FAILED: ${error.message}`, 'error');
+        return;
+      }
+
+      // Test 2: Get Multiaddrs
+      const test2 = createTestSection('Test 2: Get Multiaddrs', 'test2');
+      test2.setStatus('running');
+      log('Running Test 2: Get Multiaddrs...');
+
+      try {
+        const multiaddrs = await window.electronP2P.getMultiaddrs();
+        test2.setResult(`Multiaddrs:\n${multiaddrs.map(ma => `  ${ma}`).join('\n')}`);
+        test2.setStatus('success');
+        log(`✅ Test 2 PASSED: Found ${multiaddrs.length} multiaddr(s)`, 'success');
+      } catch (error) {
+        test2.setResult(`Error: ${error.message}`);
+        test2.setStatus('error');
+        log(`❌ Test 2 FAILED: ${error.message}`, 'error');
+        return;
+      }
+
+      // Test 3: Check Initial Connections
+      const test3 = createTestSection('Test 3: Check Initial Connections', 'test3');
+      test3.setStatus('running');
+      log('Running Test 3: Check Initial Connections...');
+
+      try {
+        const initialConnections = await window.electronP2P.getConnections();
+        test3.setResult(`Initial connections: ${initialConnections.length}`);
+        test3.setStatus('success');
+        log(`✅ Test 3 PASSED: ${initialConnections.length} initial connection(s)`, 'success');
+      } catch (error) {
+        test3.setResult(`Error: ${error.message}`);
+        test3.setStatus('error');
+        log(`❌ Test 3 FAILED: ${error.message}`, 'error');
+        return;
+      }
+
+      // Test 4: Dial Peer
+      const test4 = createTestSection('Test 4: Connect to Instance 1', 'test4');
+      test4.setStatus('running');
+      log(`Running Test 4: Connecting to ${INSTANCE_1_MULTIADDR}...`);
+
+      try {
+        const dialResult = await window.electronP2P.dialPeer(INSTANCE_1_MULTIADDR);
+
+        if (dialResult.success) {
+          test4.setResult(`✅ Connection successful!\nTarget: ${INSTANCE_1_MULTIADDR}`);
+          test4.setStatus('success');
+          log('✅ Test 4 PASSED: Connected to Instance 1', 'success');
+        } else {
+          test4.setResult(`❌ Connection failed: ${dialResult.error}`);
+          test4.setStatus('error');
+          log(`❌ Test 4 FAILED: ${dialResult.error}`, 'error');
+          return;
+        }
+      } catch (error) {
+        test4.setResult(`Error: ${error.message}`);
+        test4.setStatus('error');
+        log(`❌ Test 4 FAILED: ${error.message}`, 'error');
+        return;
+      }
+
+      // Wait a moment for connection to stabilize
+      log('⏳ Waiting 1 second for connection to stabilize...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Test 5: Verify Connection
+      const test5 = createTestSection('Test 5: Verify Connection Established', 'test5');
+      test5.setStatus('running');
+      log('Running Test 5: Verify Connection...');
+
+      try {
+        const connections = await window.electronP2P.getConnections();
+
+        if (connections.length === 0) {
+          test5.setResult('❌ No connections found after dial');
+          test5.setStatus('error');
+          log('❌ Test 5 FAILED: No connections found', 'error');
+          return;
+        }
+
+        const connectionInfo = connections.map(conn =>
+          `  Peer: ${conn.remotePeer}\n  Address: ${conn.remoteAddr}\n  Status: ${conn.status}`
+        ).join('\n\n');
+
+        test5.setResult(`✅ ${connections.length} connection(s) established:\n\n${connectionInfo}`);
+        test5.setStatus('success');
+        log(`✅ Test 5 PASSED: ${connections.length} connection(s) verified`, 'success');
+      } catch (error) {
+        test5.setResult(`Error: ${error.message}`);
+        test5.setStatus('error');
+        log(`❌ Test 5 FAILED: ${error.message}`, 'error');
+        return;
+      }
+
+      // All tests passed!
+      log('', 'info');
+      log('🎉 ALL TESTS PASSED! P2P connection is working!', 'success');
+      log('', 'info');
+      log('Summary:', 'info');
+      log('  ✅ API available', 'success');
+      log('  ✅ Peer ID retrieved', 'success');
+      log('  ✅ Multiaddrs retrieved', 'success');
+      log('  ✅ Connection to Instance 1 successful', 'success');
+      log('  ✅ Connection verified', 'success');
+    }
+
+    // Run tests on page load
+    window.addEventListener('load', () => {
+      setTimeout(runTests, 500);
+    });
+  </script>
+</body>
+</html>

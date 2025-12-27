@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Quick P2P Test</title>
+  <style>
+    body {
+      font-family: monospace;
+      padding: 20px;
+      background: #1e1e1e;
+      color: #d4d4d4;
+    }
+    .result {
+      background: #252526;
+      padding: 15px;
+      margin: 10px 0;
+      border-left: 4px solid #007acc;
+      border-radius: 4px;
+    }
+    .success { border-left-color: #4ec9b0; }
+    .error { border-left-color: #f48771; }
+    button {
+      background: #0e639c;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      margin: 10px 5px;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    button:hover { background: #1177bb; }
+    pre { margin: 5px 0; }
+  </style>
+</head>
+<body>
+  <h1>🌐 P2P Connection Test</h1>
+  <div id="status">Initializing...</div>
+
+  <div style="margin: 20px 0;">
+    <button onclick="runAllTests()">▶️ Run All Tests</button>
+    <button onclick="testConnection()">🔗 Test Connection</button>
+    <button onclick="location.reload()">🔄 Refresh</button>
+  </div>
+
+  <div id="results"></div>
+
+  <script>
+    const results = document.getElementById('results');
+    const status = document.getElementById('status');
+
+    function log(message, type = 'info') {
+      const div = document.createElement('div');
+      div.className = `result ${type}`;
+      div.innerHTML = `<pre>${message}</pre>`;
+      results.appendChild(div);
+      console.log(message);
+    }
+
+    async function runAllTests() {
+      results.innerHTML = '';
+
+      try {
+        // Test 1: Check API
+        log('Step 1: Checking API availability...');
+        if (!window.electronP2P) {
+          log('❌ ERROR: window.electronP2P not available!', 'error');
+          return;
+        }
+        log('✅ API available: ' + Object.keys(window.electronP2P).join(', '), 'success');
+
+        // Test 2: Get Peer ID
+        log('\nStep 2: Getting peer ID...');
+        const peerId = await window.electronP2P.getPeerId();
+        log('✅ Peer ID: ' + peerId, 'success');
+
+        // Test 3: Get Multiaddrs
+        log('\nStep 3: Getting multiaddrs...');
+        const multiaddrs = await window.electronP2P.getMultiaddrs();
+        log('✅ Multiaddrs:\n' + multiaddrs.join('\n'), 'success');
+
+        // Test 4: Check connections (before)
+        log('\nStep 4: Checking connections (before)...');
+        const connsBefore = await window.electronP2P.getConnections();
+        log('Connections: ' + connsBefore.length, 'info');
+        if (connsBefore.length > 0) {
+          log('Already connected:\n' + JSON.stringify(connsBefore, null, 2), 'info');
+        }
+
+        status.innerHTML = '✅ All basic tests passed! Ready for peer connection.';
+        log('\n✅ Ready to connect to peer!', 'success');
+        log('\nClick "Test Connection" button to connect to Instance 1', 'info');
+
+      } catch (error) {
+        log('❌ ERROR: ' + error.message, 'error');
+        status.innerHTML = '❌ Tests failed';
+      }
+    }
+
+    async function testConnection() {
+      log('\n🔗 Connecting to Instance 1...');
+
+      try {
+        // Connect to Instance 1 (update peer ID if needed)
+        const result = await window.electronP2P.dialPeer(
+          '/ip4/127.0.0.1/tcp/4003/p2p/12D3KooWKGJYW6bC9dvDRaZvAmRYiQtNn9ANaPDusrgEtpmJDUwQ'
+        );
+
+        if (result.success) {
+          log('✅ Connected successfully!', 'success');
+
+          // Wait a moment for connection to stabilize
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+          // Check connections
+          log('\nVerifying connection...');
+          const conns = await window.electronP2P.getConnections();
+          log('Active connections: ' + conns.length, 'success');
+
+          if (conns.length > 0) {
+            conns.forEach((conn, i) => {
+              log(`\nConnection ${i + 1}:
+  Remote Peer: ${conn.remotePeer}
+  Remote Addr: ${conn.remoteAddr}
+  Status: ${conn.status}`, 'success');
+            });
+            status.innerHTML = '✅ P2P Connection Established!';
+          }
+        } else {
+          log('❌ Connection failed: ' + result.error, 'error');
+          status.innerHTML = '❌ Connection failed';
+        }
+      } catch (error) {
+        log('❌ ERROR: ' + error.message, 'error');
+        status.innerHTML = '❌ Connection error';
+      }
+    }
+
+    // Auto-run on load
+    window.addEventListener('load', () => {
+      status.innerHTML = '⏳ Running tests...';
+      setTimeout(runAllTests, 500);
+    });
+  </script>
+</body>
+</html>

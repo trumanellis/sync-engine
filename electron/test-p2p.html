@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>P2P Connection Test</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    h1 {
+      color: #333;
+    }
+    .section {
+      background: white;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      margin: 5px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+    input {
+      width: 100%;
+      padding: 8px;
+      margin: 10px 0;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    pre {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 4px;
+      overflow-x: auto;
+      border-left: 4px solid #007bff;
+    }
+    .success {
+      color: #28a745;
+      font-weight: bold;
+    }
+    .error {
+      color: #dc3545;
+      font-weight: bold;
+    }
+    .info {
+      color: #17a2b8;
+    }
+  </style>
+</head>
+<body>
+  <h1>🌐 P2P Connection Test</h1>
+
+  <div class="section">
+    <h2>📊 Local Node Info</h2>
+    <button onclick="getNodeInfo()">Get My Node Info</button>
+    <pre id="nodeInfo">Click button to load node info...</pre>
+  </div>
+
+  <div class="section">
+    <h2>🔗 Connections</h2>
+    <button onclick="getConnections()">Refresh Connections</button>
+    <pre id="connections">Click button to load connections...</pre>
+  </div>
+
+  <div class="section">
+    <h2>📞 Dial Peer</h2>
+    <p>Enter the full multiaddr of the peer you want to connect to:</p>
+    <input
+      type="text"
+      id="multiaddr"
+      placeholder="/ip4/127.0.0.1/tcp/4003/p2p/12D3Koo..."
+      value="/ip4/127.0.0.1/tcp/4003/p2p/12D3KooWAcQbo3gkUQZz5j6rBBnDSTn6wfNWKw435Fy12FpuKwQq"
+    />
+    <button onclick="dialPeer()">Connect to Peer</button>
+    <pre id="dialResult">Enter multiaddr and click Connect...</pre>
+  </div>
+
+  <div class="section">
+    <h2>📝 Instructions</h2>
+    <p><strong>To test P2P connection between two instances:</strong></p>
+    <ol>
+      <li>Start Instance 1: <code>npx electron .</code></li>
+      <li>Start Instance 2: <code>npx electron . --user-data-dir=/tmp/syncengine-instance2</code></li>
+      <li>In Instance 2, open DevTools (Cmd+Option+I) and load this test page</li>
+      <li>Click "Get My Node Info" to see Instance 2's peer ID</li>
+      <li>Copy Instance 1's multiaddr from the logs (shown above in the input field)</li>
+      <li>Click "Connect to Peer" to establish connection</li>
+      <li>Click "Refresh Connections" to verify connection is established</li>
+    </ol>
+  </div>
+
+  <script>
+    // Check if electronP2P API is available
+    if (!window.electronP2P) {
+      document.body.innerHTML = '<h1 class="error">❌ Error: electronP2P API not available</h1><p>This page must be loaded in the Electron renderer process.</p>';
+    }
+
+    async function getNodeInfo() {
+      const output = document.getElementById('nodeInfo');
+      output.textContent = 'Loading...';
+
+      try {
+        const peerId = await window.electronP2P.getPeerId();
+        const multiaddrs = await window.electronP2P.getMultiaddrs();
+
+        output.innerHTML = `<span class="success">✅ Node initialized successfully</span>\n\n` +
+          `<strong>Peer ID:</strong>\n${peerId}\n\n` +
+          `<strong>Multiaddrs:</strong>\n${multiaddrs.map(ma => `  ${ma}`).join('\n')}`;
+      } catch (error) {
+        output.innerHTML = `<span class="error">❌ Error:</span> ${error.message}`;
+      }
+    }
+
+    async function getConnections() {
+      const output = document.getElementById('connections');
+      output.textContent = 'Loading...';
+
+      try {
+        const connections = await window.electronP2P.getConnections();
+
+        if (connections.length === 0) {
+          output.innerHTML = `<span class="info">ℹ️ No active connections</span>\n\nThis node is not connected to any peers yet.`;
+        } else {
+          output.innerHTML = `<span class="success">✅ Connected to ${connections.length} peer(s)</span>\n\n` +
+            connections.map((conn, i) =>
+              `<strong>Connection ${i + 1}:</strong>\n` +
+              `  Peer: ${conn.remotePeer}\n` +
+              `  Address: ${conn.remoteAddr}\n` +
+              `  Status: ${conn.status}`
+            ).join('\n\n');
+        }
+      } catch (error) {
+        output.innerHTML = `<span class="error">❌ Error:</span> ${error.message}`;
+      }
+    }
+
+    async function dialPeer() {
+      const multiaddr = document.getElementById('multiaddr').value.trim();
+      const output = document.getElementById('dialResult');
+
+      if (!multiaddr) {
+        output.innerHTML = `<span class="error">❌ Error:</span> Please enter a multiaddr`;
+        return;
+      }
+
+      output.textContent = 'Connecting...';
+
+      try {
+        const result = await window.electronP2P.dialPeer(multiaddr);
+
+        if (result.success) {
+          output.innerHTML = `<span class="success">✅ Connected successfully!</span>\n\nConnected to: ${multiaddr}\n\nClick "Refresh Connections" to see the new connection.`;
+
+          // Auto-refresh connections after 1 second
+          setTimeout(getConnections, 1000);
+        } else {
+          output.innerHTML = `<span class="error">❌ Connection failed:</span>\n${result.error}`;
+        }
+      } catch (error) {
+        output.innerHTML = `<span class="error">❌ Error:</span> ${error.message}`;
+      }
+    }
+
+    // Auto-load node info on page load
+    window.addEventListener('load', () => {
+      getNodeInfo();
+      getConnections();
+    });
+  </script>
+</body>
+</html>

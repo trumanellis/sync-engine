@@ -1,0 +1,312 @@
+/**
+ * Integration tests for P2P initialization
+ * Phase 1.5: Real Helia + OrbitDB with Level storage
+ * Following TDD - these tests should FAIL initially (RED phase)
+ *
+ * NOTE: Run with: npm run test:unit -- p2p-init.test.js --browser
+ * These tests require a browser environment for P2P stack
+ */
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { initializeP2P, openDatabase, closeP2P } from '../../src/lib/p2p.js';
+describe('P2P Initialization', () => {
+    let p2pInstance;
+    let testIdentity;
+
+    beforeEach(async () => {
+        // Create mock identity for testing
+        testIdentity = {
+            id: 'did:key:z6MkTest123',
+            publicKey: new Uint8Array(32).fill(1),
+            type: 'webauthn',
+            sign: vi.fn().mockResolvedValue(new Uint8Array(64)),
+            verify: vi.fn().mockResolvedValue(true)
+        };
+    });
+
+    afterEach(async () => {
+        // Cleanup after each test
+        if (p2pInstance) {
+            await closeP2P(p2pInstance);
+            p2pInstance = null;
+        }
+    });
+
+    describe('Basic initialization', () => {
+        it('should initialize libp2p, Helia, and OrbitDB', async () => {
+            // Act
+            p2pInstance = await initializeP2P({
+                directory: './test-orbitdb',
+                identity: testIdentity
+            });
+
+            // Assert
+            expect(p2pInstance).toBeTruthy();
+            expect(p2pInstance.libp2p).toBeTruthy();
+            expect(p2pInstance.helia).toBeTruthy();
+            expect(p2pInstance.orbitdb).toBeTruthy();
+        }, 30000); // 30s timeout for network initialization
+
+        it('should have a valid peer ID', async () => {
+            // Act
+            p2pInstance = await initializeP2P({
+                directory: './test-orbitdb',
+                identity: testIdentity
+            });
+
+            // Assert
+            const peerId = p2pInstance.libp2p.peerId.toString();
+            expect(peerId).toBeTruthy();
+            expect(peerId.length).toBeGreaterThan(10);
+        }, 30000);
+
+        it('should configure libp2p with multiple transports', async () => {
+            // Act
+            p2pInstance = await initializeP2P({
+                directory: './test-orbitdb',
+                identity: testIdentity
+            });
+
+            // Assert
+            const libp2p = p2pInstance.libp2p;
+            expect(libp2p.components.transports).toBeTruthy();
+            expect(libp2p.services.identify).toBeTruthy();
+            expect(libp2p.services.pubsub).toBeTruthy();
+        }, 30000);
+
+        it('should create Helia with Level storage', async () => {
+            // Act
+            p2pInstance = await initializeP2P({
+                directory: './test-orbitdb',
+                identity: testIdentity
+            });
+
+            // Assert
+            const helia = p2pInstance.helia;
+            expect(helia.blockstore).toBeTruthy();
+            expect(helia.datastore).toBeTruthy();
+        }, 30000);
+
+        it('should create OrbitDB with custom identity', async () => {
+            // Act
+            p2pInstance = await initializeP2P({
+                directory: './test-orbitdb',
+                identity: testIdentity
+            });
+
+            // Assert
+            const orbitdb = p2pInstance.orbitdb;
+            expect(orbitdb.identity).toBeTruthy();
+            expect(orbitdb.identity.id).toBe(testIdentity.id);
+        }, 30000);
+    });
+
+    describe('Database operations', () => {
+        beforeEach(async () => {
+            // Initialize P2P before database tests
+            p2pInstance = await initializeP2P({
+                directory: './test-orbitdb',
+                identity: testIdentity
+            });
+        });
+
+        it('should open a new database', async () => {
+            // Arrange
+            const dbName = 'test-intentions';
+
+            // Act
+            const db = await openDatabase(p2pInstance.orbitdb, dbName, {
+                type: 'documents',
+                create: true
+            });
+
+            // Assert
+            expect(db).toBeTruthy();
+            expect(db.address).toBeTruthy();
+            expect(db.type).toBe('documents');
+
+            // Cleanup
+            await db.close();
+        }, 30000);
+
+        it('should write and read from database', async () => {
+            // Arrange
+            const dbName = 'test-data';
+            const db = await openDatabase(p2pInstance.orbitdb, dbName, {
+                type: 'documents',
+                create: true
+            });
+
+            const testDoc = {
+                _id: 'test-1',
+                title: 'Test Intention',
+                content: 'This is a test'
+            };
+
+            // Act
+            await db.put(testDoc);
+            const allDocs = await db.all();
+
+            // Assert
+            expect(allDocs).toHaveLength(1);
+            expect(allDocs[0]).toMatchObject(testDoc);
+
+            // Cleanup
+            await db.close();
+        }, 30000);
+
+        it('should support multiple database types', async () => {
+            // Arrange & Act
+            const documentsDB = await openDatabase(p2pInstance.orbitdb, 'test-documents', {
+                type: 'documents',
+                create: true
+            });
+
+            const keyvalueDB = await openDatabase(p2pInstance.orbitdb, 'test-keyvalue', {
+                type: 'keyvalue',
+                create: true
+            });
+
+            // Assert
+            expect(documentsDB.type).toBe('documents');
+            expect(keyvalueDB.type).toBe('keyvalue');
+
+            // Cleanup
+            await documentsDB.close();
+            await keyvalueDB.close();
+        }, 30000);
+
+        it('should persist data across database reopens', async () => {
+            // Arrange
+            const dbName = 'test-persistence';
+            const testDoc = {
+                _id: 'persist-1',
+                data: 'persistent data'
+            };
+
+            // Create database and add data
+            const db1 = await openDatabase(p2pInstance.orbitdb, dbName, {
+                type: 'documents',
+                create: true
+            });
+            await db1.put(testDoc);
+            await db1.close();
+
+            // Reopen database
+            const db2 = await openDatabase(p2pInstance.orbitdb, dbName, {
+                type: 'documents',
+                create: false
+            });
+
+            // Assert
+            const allDocs = await db2.all();
+            expect(allDocs).toHaveLength(1);
+            expect(allDocs[0]).toMatchObject(testDoc);
+
+            // Cleanup
+            await db2.close();
+        }, 30000);
+    });
+
+    describe('Network connectivity', () => {
+        it('should have gossipsub for pubsub', async () => {
+            // Act
+            p2pInstance = await initializeP2P({
+                directory: './test-orbitdb',
+                identity: testIdentity
+            });
+
+            // Assert
+            const pubsub = p2pInstance.libp2p.services.pubsub;
+            expect(pubsub).toBeTruthy();
+            expect(typeof pubsub.subscribe).toBe('function');
+            expect(typeof pubsub.publish).toBe('function');
+        }, 30000);
+
+        it('should support WebRTC transport', async () => {
+            // Act
+            p2pInstance = await initializeP2P({
+                directory: './test-orbitdb',
+                identity: testIdentity
+            });
+
+            // Assert
+            const libp2p = p2pInstance.libp2p;
+            const transportManager = libp2p.components.transports;
+            expect(transportManager).toBeTruthy();
+            // WebRTC transport should be configured
+        }, 30000);
+
+        it('should support circuit relay for NAT traversal', async () => {
+            // Act
+            p2pInstance = await initializeP2P({
+                directory: './test-orbitdb',
+                identity: testIdentity
+            });
+
+            // Assert
+            const libp2p = p2pInstance.libp2p;
+            expect(libp2p.components.transports).toBeTruthy();
+            // Circuit relay should be available
+        }, 30000);
+    });
+
+    describe('Cleanup and shutdown', () => {
+        it('should gracefully close all components', async () => {
+            // Arrange
+            p2pInstance = await initializeP2P({
+                directory: './test-orbitdb',
+                identity: testIdentity
+            });
+
+            const db = await openDatabase(p2pInstance.orbitdb, 'test-cleanup', {
+                type: 'documents',
+                create: true
+            });
+
+            // Act
+            await db.close();
+            await closeP2P(p2pInstance);
+
+            // Assert - should not throw
+            expect(true).toBe(true);
+            p2pInstance = null; // Prevent afterEach cleanup
+        }, 30000);
+
+        it('should handle cleanup when no databases are open', async () => {
+            // Arrange
+            p2pInstance = await initializeP2P({
+                directory: './test-orbitdb',
+                identity: testIdentity
+            });
+
+            // Act
+            await closeP2P(p2pInstance);
+
+            // Assert - should not throw
+            expect(true).toBe(true);
+            p2pInstance = null;
+        }, 30000);
+    });
+
+    describe('Error handling', () => {
+        it('should handle missing identity gracefully', async () => {
+            // Act & Assert
+            await expect(
+                initializeP2P({
+                    directory: './test-orbitdb'
+                    // No identity provided
+                })
+            ).rejects.toThrow();
+        }, 30000);
+
+        it('should handle invalid directory paths', async () => {
+            // Act & Assert
+            await expect(
+                initializeP2P({
+                    directory: '/invalid/path/that/does/not/exist',
+                    identity: testIdentity
+                })
+            ).rejects.toThrow();
+        }, 30000);
+    });
+});

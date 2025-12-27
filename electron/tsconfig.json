@@ -1,0 +1,17 @@
+{
+  "compileOnSave": true,
+  "include": ["./src/**/*", "./capacitor.config.ts", "./capacitor.config.js"],
+  "compilerOptions": {
+    "outDir": "./build",
+    "importHelpers": true,
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "typeRoots": ["./node_modules/@types"],
+    "allowJs": true,
+    "rootDir": "."
+  }
+}
